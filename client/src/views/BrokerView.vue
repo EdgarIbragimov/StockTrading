@@ -31,9 +31,7 @@
             <div>
               <p style="color: #6c757d; font-size: 14px">Стоимость акций</p>
               <p style="font-size: 24px; font-weight: 600">
-                ${{
-                  (portfolio.totalBalance - currentBroker!.balance).toFixed(2)
-                }}
+                ${{ portfolio.totalStocksValue.toFixed(2) }}
               </p>
             </div>
             <div>

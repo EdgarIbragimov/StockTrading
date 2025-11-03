@@ -2,7 +2,7 @@
   <div>
     <div class="header">
       <div class="header-content">
-        <h1>Брокерская Торговая Платформа</h1>
+        <h1 style="color: #4a90e2; font-size: 1.8rem; font-weight: 600;" >Broker Exc. Platform</h1>
       </div>
     </div>
 

@@ -41,6 +41,7 @@ export interface Portfolio {
   broker: Broker;
   portfolio: PortfolioItem[];
   totalBalance: number;
+  totalStocksValue: number;
   totalInvested: number;
   totalProfitLoss: number;
 }

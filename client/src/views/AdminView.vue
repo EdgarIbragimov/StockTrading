@@ -149,6 +149,7 @@ const { currentDate, stockPrices, connect, disconnect } = useSocket();
 interface BrokerWithPortfolio extends Broker {
   portfolio?: Portfolio["portfolio"];
   totalBalance?: number;
+  totalStocksValue?: number;
   totalInvested?: number;
   totalProfitLoss?: number;
 }
@@ -158,7 +159,6 @@ const brokersWithPortfolio = ref<BrokerWithPortfolio[]>([]);
 const loadBrokersData = async () => {
   await fetchBrokers();
 
-  // Загружаем портфели для каждого брокера
   const portfolioPromises = brokers.value.map(async (broker) => {
     try {
       const response = await brokersApi.getPortfolio(broker.id);
@@ -166,6 +166,7 @@ const loadBrokersData = async () => {
         ...broker,
         portfolio: response.data.portfolio,
         totalBalance: response.data.totalBalance,
+        totalStocksValue: response.data.totalStocksValue,
         totalInvested: response.data.totalInvested,
         totalProfitLoss: response.data.totalProfitLoss,
       };
@@ -175,6 +176,7 @@ const loadBrokersData = async () => {
         ...broker,
         portfolio: [],
         totalBalance: broker.balance,
+        totalStocksValue: 0,
         totalInvested: 0,
         totalProfitLoss: 0,
       };
@@ -184,15 +186,13 @@ const loadBrokersData = async () => {
   brokersWithPortfolio.value = await Promise.all(portfolioPromises);
 };
 
-// Обновление портфелей существующих брокеров БЕЗ замены массива
 const updateBrokersPortfolios = async () => {
-  // Обновляем портфели для каждого брокера на месте
   for (const broker of brokersWithPortfolio.value) {
     try {
       const response = await brokersApi.getPortfolio(broker.id);
-      // Обновляем свойства существующего объекта вместо замены
       broker.portfolio = response.data.portfolio;
       broker.totalBalance = response.data.totalBalance;
+      broker.totalStocksValue = response.data.totalStocksValue;
       broker.totalInvested = response.data.totalInvested;
       broker.totalProfitLoss = response.data.totalProfitLoss;
     } catch (e) {
@@ -214,8 +214,6 @@ watch(
   stockPrices,
   (newPrices) => {
     if (newPrices && newPrices.length > 0) {
-      // Обновляем данные существующих брокеров БЕЗ замены массива
-      // Это не вызывает полную перерисовку и сохраняет скролл
       updateBrokersPortfolios();
     }
   },

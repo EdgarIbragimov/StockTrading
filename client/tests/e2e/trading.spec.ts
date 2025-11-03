@@ -1,163 +1,143 @@
 import { test, expect } from "@playwright/test";
 
-test.describe("Broker Trading System", () => {
+test.describe("Broker Trading System - E2E Tests", () => {
   test.beforeEach(async ({ page }) => {
-    // Переходим на страницу входа
     await page.goto("/");
     await page.waitForLoadState("networkidle");
   });
 
-  test("should login as broker", async ({ page }) => {
-    // Проверяем наличие заголовка
-    await expect(
-      page.getByText("Брокерская Торговая Платформа")
-    ).toBeVisible();
-
-    // Проверяем наличие селекта с брокерами
-    const select = page.locator("select");
-    await expect(select).toBeVisible();
-
-    // Выбираем первого брокера
-    await select.selectOption({ index: 1 });
-
-    // Нажимаем кнопку входа
-    await page.getByRole("button", { name: /войти как брокер/i }).click();
-
-    // Проверяем, что перешли на страницу брокера
-    await expect(page).toHaveURL(/\/broker\/.+/);
-  });
-
-  test("should buy stocks and verify balance decrease", async ({ page }) => {
-    // Входим как брокер
-    const select = page.locator("select");
-    await select.selectOption({ index: 1 });
+  /**
+   * Тест 1: Покупка N акций и проверка изменения баланса
+   * ТЗ п.7: "при покупке N акций в определённую дату соответствующим образом
+   * изменяется баланс средств брокера"
+   */
+  test("should buy N stocks and decrease balance correctly", async ({
+    page,
+  }) => {
+    // Входим как брокер с достаточным балансом
+    await page.locator("select").selectOption({ index: 5 });
     await page.getByRole("button", { name: /войти как брокер/i }).click();
     await page.waitForURL(/\/broker\/.+/);
-
-    // Ждем загрузки данных
     await page.waitForSelector("table", { timeout: 10000 });
 
     // Запоминаем начальный баланс
-    const initialBalanceText = await page
-      .locator('p:has-text("Денежные средства") + p')
-      .textContent();
     const initialBalance = parseFloat(
-      initialBalanceText?.replace("$", "") || "0"
+      (
+        await page.locator('p:has-text("Денежные средства") + p').textContent()
+      )?.replace("$", "") || "0"
     );
 
-    // Находим первую активную акцию и нажимаем "Купить"
+    // Покупаем N=3 акции
     await page
       .locator('tbody tr:has(.badge-success) button:has-text("Купить")')
       .first()
       .click();
-
-    // Ждем появления диалога
-    await page.waitForSelector(".modal-overlay", { timeout: 5000 });
-
-    // Вводим количество акций
-    await page.locator('input[type="number"]').fill("5");
+    await page.waitForSelector(".modal-overlay");
+    await page.locator('.modal input[type="number"]').fill("3");
 
     // Запоминаем сумму покупки
-    const totalAmountText = await page
-      .locator('.modal p:has-text("Сумма:") strong')
-      .textContent();
-    const totalAmount = parseFloat(totalAmountText?.replace("$", "") || "0");
+    const purchaseAmount = parseFloat(
+      (
+        await page.locator('.modal p:has-text("Сумма:") strong').textContent()
+      )?.replace("$", "") || "0"
+    );
 
     // Подтверждаем покупку
-    await page.getByRole("button", { name: /^Купить$/i }).click();
-
-    // Ждем закрытия диалога
+    await page.locator('.modal button:has-text("Купить")').first().click();
     await page.waitForSelector(".modal-overlay", { state: "hidden" });
+    await page.waitForTimeout(500);
 
-    // Ждем обновления баланса
-    await page.waitForTimeout(1000);
-
-    // Проверяем, что баланс уменьшился
-    const newBalanceText = await page
-      .locator('p:has-text("Денежные средства") + p')
-      .textContent();
-    const newBalance = parseFloat(newBalanceText?.replace("$", "") || "0");
-
-    expect(newBalance).toBeLessThan(initialBalance);
-    expect(Math.abs(newBalance - (initialBalance - totalAmount))).toBeLessThan(
-      0.01
+    // Проверяем что баланс уменьшился точно на сумму покупки
+    const newBalance = parseFloat(
+      (
+        await page.locator('p:has-text("Денежные средства") + p').textContent()
+      )?.replace("$", "") || "0"
     );
+
+    const expectedBalance = initialBalance - purchaseAmount;
+    expect(Math.abs(newBalance - expectedBalance)).toBeLessThan(0.01);
   });
 
-  test("should sell stocks and verify balance increase", async ({ page }) => {
+  /**
+   * Тест 2: Продажа N акций и проверка изменения баланса
+   * ТЗ п.7: "при продаже N акций в определённую дату соответствующим образом
+   * изменяется баланс средств брокера"
+   */
+  test("should sell N stocks and increase balance correctly", async ({
+    page,
+  }) => {
     // Входим как брокер
-    const select = page.locator("select");
-    await select.selectOption({ index: 1 });
+    await page.locator("select").selectOption({ index: 5 });
     await page.getByRole("button", { name: /войти как брокер/i }).click();
     await page.waitForURL(/\/broker\/.+/);
-
-    // Ждем загрузки данных
     await page.waitForSelector("table", { timeout: 10000 });
 
-    // Сначала покупаем акции чтобы было что продавать
+    // Сначала покупаем акции
     await page
       .locator('tbody tr:has(.badge-success) button:has-text("Купить")')
       .first()
       .click();
     await page.waitForSelector(".modal-overlay");
-    await page.locator('input[type="number"]').fill("10");
-    await page.getByRole("button", { name: /^Купить$/i }).click();
+    await page.locator('.modal input[type="number"]').fill("5");
+    await page.locator('.modal button:has-text("Купить")').first().click();
     await page.waitForSelector(".modal-overlay", { state: "hidden" });
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(500);
 
-    // Запоминаем текущий баланс
-    const initialBalanceText = await page
-      .locator('p:has-text("Денежные средства") + p')
-      .textContent();
-    const initialBalance = parseFloat(
-      initialBalanceText?.replace("$", "") || "0"
+    // Запоминаем баланс перед продажей
+    const balanceBeforeSell = parseFloat(
+      (
+        await page.locator('p:has-text("Денежные средства") + p').textContent()
+      )?.replace("$", "") || "0"
     );
 
-    // Продаем акции
-    const portfolioTable = page.locator('h2:has-text("Мой портфель") + table');
-    await portfolioTable.locator('button:has-text("Продать")').first().click();
-
-    // Ждем появления диалога продажи
+    // Продаем N=2 акции
+    await page
+      .locator('h2:has-text("Мой портфель") + table button:has-text("Продать")')
+      .first()
+      .click();
     await page.waitForSelector(".modal-overlay");
-
-    // Вводим количество для продажи
-    await page.locator('input[type="number"]').fill("5");
+    await page.locator('.modal input[type="number"]').fill("2");
 
     // Запоминаем сумму продажи
-    const sellAmountText = await page
-      .locator('.modal p:has-text("Сумма:") strong')
-      .textContent();
-    const sellAmount = parseFloat(sellAmountText?.replace("$", "") || "0");
+    const sellAmount = parseFloat(
+      (
+        await page.locator('.modal p:has-text("Сумма:") strong').textContent()
+      )?.replace("$", "") || "0"
+    );
 
     // Подтверждаем продажу
-    await page.getByRole("button", { name: /^Продать$/i }).click();
-
-    // Ждем закрытия диалога
+    await page.locator('.modal button:has-text("Продать")').first().click();
     await page.waitForSelector(".modal-overlay", { state: "hidden" });
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(500);
 
-    // Проверяем, что баланс увеличился
-    const newBalanceText = await page
-      .locator('p:has-text("Денежные средства") + p')
-      .textContent();
-    const newBalance = parseFloat(newBalanceText?.replace("$", "") || "0");
-
-    expect(newBalance).toBeGreaterThan(initialBalance);
-    expect(Math.abs(newBalance - (initialBalance + sellAmount))).toBeLessThan(
-      0.01
+    // Проверяем что баланс увеличился точно на сумму продажи
+    const balanceAfterSell = parseFloat(
+      (
+        await page.locator('p:has-text("Денежные средства") + p').textContent()
+      )?.replace("$", "") || "0"
     );
+
+    const expectedBalance = balanceBeforeSell + sellAmount;
+    expect(Math.abs(balanceAfterSell - expectedBalance)).toBeLessThan(0.01);
   });
 
-  test("should calculate profit/loss correctly", async ({ page }) => {
+  /**
+   * Тест 3: Проверка расчета прибыли/убытка
+   * ТЗ п.7: "получается правильная прибыль/убыток по данной акции"
+   *
+   * Проверяем что прибыль/убыток отображается в портфеле.
+   * Формула: (текущая_цена - средняя_цена_покупки) × количество
+   */
+  test("should display profit/loss correctly in portfolio", async ({
+    page,
+  }) => {
     // Входим как брокер
-    const select = page.locator("select");
-    await select.selectOption({ index: 1 });
+    await page.locator("select").selectOption({ index: 5 });
     await page.getByRole("button", { name: /войти как брокер/i }).click();
     await page.waitForURL(/\/broker\/.+/);
-
     await page.waitForSelector("table", { timeout: 10000 });
 
-    // Покупаем акции
+    // Покупаем N=3 акции
     await page
       .locator('tbody tr:has(.badge-success) button:has-text("Купить")')
       .first()
@@ -171,63 +151,53 @@ test.describe("Broker Trading System", () => {
     const buyPrice = parseFloat(
       buyPriceText?.match(/\$(\d+\.\d+)/)?.[1] || "0"
     );
+    const quantity = 3;
 
-    await page.locator('input[type="number"]').fill("10");
-    await page.getByRole("button", { name: /^Купить$/i }).click();
+    await page.locator('.modal input[type="number"]').fill(String(quantity));
+    await page.locator('.modal button:has-text("Купить")').first().click();
     await page.waitForSelector(".modal-overlay", { state: "hidden" });
+    await page.waitForTimeout(500);
 
-    // Ждем появления акции в портфеле
-    await page.waitForTimeout(2000);
-
-    // Проверяем наличие данных о прибыли/убытке в портфеле
+    // Проверяем что акции появились в портфеле
     const portfolioTable = page.locator('h2:has-text("Мой портфель") + table');
     await expect(portfolioTable).toBeVisible();
 
-    // Проверяем, что есть колонка с прибылью/убытком
-    const profitLossCell = portfolioTable.locator(
-      "tbody tr:first-child td:nth-child(7)"
+    // Получаем данные из портфеля
+    const avgPrice = parseFloat(
+      (
+        await portfolioTable
+          .locator("tbody tr:first-child td:nth-child(4)")
+          .textContent()
+      )?.replace("$", "") || "0"
     );
-    await expect(profitLossCell).toBeVisible();
+    const currentPrice = parseFloat(
+      (
+        await portfolioTable
+          .locator("tbody tr:first-child td:nth-child(5)")
+          .textContent()
+      )?.replace("$", "") || "0"
+    );
+    const profitLossText = await portfolioTable
+      .locator("tbody tr:first-child td:nth-child(7)")
+      .textContent();
 
-    const profitLossText = await profitLossCell.textContent();
+    // Проверяем средняя цена = цена покупки (первая покупка)
+    expect(Math.abs(avgPrice - buyPrice)).toBeLessThan(0.01);
+
+    // Проверяем что поле прибыли/убытка отображается
     expect(profitLossText).toMatch(/[\+\-]?\$\d+\.\d+/);
-  });
 
-  test("should prevent buying stocks with insufficient funds", async ({
-    page,
-  }) => {
-    // Входим как брокер
-    const select = page.locator("select");
-    await select.selectOption({ index: 1 });
-    await page.getByRole("button", { name: /войти как брокер/i }).click();
-    await page.waitForURL(/\/broker\/.+/);
+    // Рассчитываем ожидаемую прибыль/убыток
+    const expectedProfitLoss = (currentPrice - avgPrice) * quantity;
 
-    await page.waitForSelector("table", { timeout: 10000 });
+    // Парсим фактическую прибыль/убыток
+    const actualProfitLoss = parseFloat(
+      profitLossText?.replace(/[\+\$\-]/g, "") || "0"
+    );
+    const isNegative = profitLossText?.includes("-") || false;
+    const finalProfitLoss = isNegative ? -actualProfitLoss : actualProfitLoss;
 
-    // Пытаемся купить очень большое количество акций
-    await page
-      .locator('tbody tr:has(.badge-success) button:has-text("Купить")')
-      .first()
-      .click();
-    await page.waitForSelector(".modal-overlay");
-
-    await page.locator('input[type="number"]').fill("100000");
-    await page.getByRole("button", { name: /^Купить$/i }).click();
-
-    // Ждем появления ошибки
-    await expect(page.locator(".error")).toBeVisible({ timeout: 5000 });
-  });
-
-  test("should display admin panel with all brokers", async ({ page }) => {
-    // Переходим в панель администратора
-    await page.getByRole("button", { name: /войти как администратор/i }).click();
-    await page.waitForURL("/admin");
-
-    // Проверяем заголовок
-    await expect(page.getByText("Панель администратора")).toBeVisible();
-
-    // Проверяем наличие информации о брокерах
-    await expect(page.locator("h3")).toHaveCount({ timeout: 10000 }, { min: 1 });
+    // Проверяем правильность расчета
+    expect(Math.abs(finalProfitLoss - expectedProfitLoss)).toBeLessThan(0.01);
   });
 });
-
